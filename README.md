@@ -55,33 +55,7 @@ The offline demo area contains hidden ore bodies so the method can be validated.
 | 5-fold CV macro F1 | 0.952 ± 0.019 |
 
 Real ground is noisier than the demo area; use results to prioritise sampling, not replace it.
-
-## Project layout
-
-```
-geoore/
-  synthetic.py      demo study area (bands, DEM, faults, assays)
-  indices.py        mineral indices
-  terrain.py        slope, relief, fault distance
-  prospectivity.py  scoring, confidence, targets, explanations
-  grade_model.py    XGBoost grade classifier + SHAP
-  export.py         GeoTIFF / GeoJSON / shapefile export
-  mapviz.py         Folium map
-  gee.py            Google Earth Engine loader
-  pipeline.py       end-to-end run
-app.py              Streamlit app
-scripts/            CLI, page builder and page template
-tests/              pytest suite
-docs/               GitHub Pages site
-```
-
-## GitHub Pages
-
-`docs/index.html` is a single self-contained file (images and map embedded). Rebuild it with `python scripts/build_page.py`.
-
-
-Repository **Settings → Pages → Source: Deploy from a branch → `main` / `docs`**.
-
+  
 ## Author
 
 Swayam Shakya, 2026. MIT License.
