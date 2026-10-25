@@ -4,8 +4,6 @@
 A software-only mineral exploration tool: open satellite data, elevation models and geological maps
 go in; a prospectivity heatmap, ranked sampling targets and ore grade predictions come out.
 
-Project page: `https://<your-username>.github.io/GeoOre/`
-
 ![Prospectivity map](docs/preview.jpg)
 
 ## Features
