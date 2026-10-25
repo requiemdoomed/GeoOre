@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoOre · Ore-Field Identification</title>
+<meta name="description" content="GeoOre finds likely ore ground from satellite imagery, terrain and fault maps, and grades ore from assay data. By Swayam Shakya.">
+<meta name="author" content="Swayam Shakya">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 29 27H3Z' fill='%23d4892f'/%3E%3Cpath d='M16 13 22 24H10Z' fill='%23241a12'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --basalt:#141210;--shale:#1d1a16;--slate:#27231d;--line:#3a332a;
+  --sand:#efe6d4;--dust:#b5a993;--ochre:#d4892f;--rust:#b4472a;--sage:#8fae7c;--glacier:#7fe3ee;--lime:#c6ff7a;
+  --serif:"Fraunces",Georgia,serif;--sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--basalt);color:var(--sand);font:16px/1.65 var(--sans);overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:var(--ochre)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--glacier);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1160px;margin:0 auto;padding:0 20px}
+section[id],header[id]{scroll-margin-top:72px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ochre);display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--ochre)}
+h1,h2,h3{font-family:var(--serif);font-weight:700;letter-spacing:-.015em}
+h2{font-size:clamp(30px,4.4vw,46px);line-height:1.08;margin:12px 0 14px}
+h3{font-size:20px;margin:0 0 8px}
+.sub{color:var(--dust);max-width:720px;margin:0}
+.mono{font-family:var(--mono)}
+
+/* depth gauge */
+#depth{position:fixed;left:0;top:0;height:3px;width:0;background:linear-gradient(90deg,var(--sage),var(--ochre),var(--rust));z-index:60}
+
+/* nav */
+nav{position:sticky;top:0;z-index:50;background:rgba(20,18,16,.86);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;height:60px;gap:6px}
+.brand{display:flex;align-items:center;gap:10px;font:700 21px var(--serif);color:var(--sand);text-decoration:none;margin-right:auto}
+.brand svg{width:26px;height:26px}
+.brand b{color:var(--ochre)}
+.navlinks{display:flex;gap:4px}
+.navlinks a{color:var(--dust);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:6px}
+.navlinks a:hover,.navlinks a.on{color:var(--sand);background:var(--slate)}
+#menuBtn{display:none;background:none;border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+@media (max-width:860px){
+  #menuBtn{display:block}
+  .navlinks{position:absolute;top:60px;left:0;right:0;flex-direction:column;background:var(--basalt);border-bottom:1px solid var(--line);padding:8px 16px 16px;display:none}
+  .navlinks.open{display:flex}
+  .navlinks a{padding:12px}
+}
+
+/* hero */
+.hero{position:relative;min-height:calc(100vh - 60px);min-height:calc(100svh - 60px);display:flex;align-items:center;overflow:hidden;padding:60px 0}
+#topo{position:absolute;inset:0;width:100%;height:100%}
+.hero::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(20,18,16,.92) 0,rgba(20,18,16,.55) 45%,rgba(20,18,16,.15) 100%);pointer-events:none}
+.hero .wrap{position:relative;z-index:2;width:100%}
+.hero h1{font-size:clamp(42px,7.6vw,92px);line-height:.98;margin:18px 0 22px;max-width:880px}
+.hero h1 em{font-style:normal;color:var(--ochre)}
+.lead{font-size:clamp(17px,2vw,20px);color:#d9cfbb;max-width:620px}
+.ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:8px;font-weight:600;text-decoration:none;border:1px solid transparent;transition:transform .15s,background .15s}
+.btn:hover{transform:translateY(-2px)}
+.btn.primary{background:var(--ochre);color:#1d1306}
+.btn.primary:hover{background:#e39a40}
+.btn.ghost{border-color:var(--line);color:var(--sand);background:rgba(29,26,22,.6)}
+.btn.ghost:hover{border-color:var(--dust)}
+#readout{position:absolute;right:20px;bottom:20px;z-index:3;font:12px/1.7 var(--mono);color:var(--dust);background:rgba(20,18,16,.75);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:210px}
+#readout b{color:var(--glacier);font-weight:500}
+@media (max-width:640px){#readout{display:none}}
+
+/* strata divider */
+.strata{height:46px;background:
+ linear-gradient(180deg,#3b2b1d 0 18%,#5a3e24 18% 30%,#2a2218 30% 48%,#6b4b2a 48% 58%,#33291f 58% 76%,#4a3622 76% 88%,#1d1a16 88%);
+ -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 46' preserveAspectRatio='none'%3E%3Cpath d='M0 12 C150 0 300 22 450 10 S750 2 900 14 1100 4 1200 10 V46 H0Z'/%3E%3C/svg%3E") center/100% 100%;
+ mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 46' preserveAspectRatio='none'%3E%3Cpath d='M0 12 C150 0 300 22 450 10 S750 2 900 14 1100 4 1200 10 V46 H0Z'/%3E%3C/svg%3E") center/100% 100%}
+
+section{padding:84px 0;position:relative}
+.alt{background:var(--shale)}
+
+/* core-sample stats */
+.cores{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.core{background:var(--slate);border:1px solid var(--line);border-radius:12px;padding:20px 20px 18px;position:relative;overflow:hidden}
+.core::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:repeating-linear-gradient(180deg,var(--ochre) 0 10px,#7a4f22 10px 16px,var(--rust) 16px 22px,#5d4a35 22px 30px)}
+.core .v{font:700 clamp(30px,3.6vw,40px)/1 var(--serif);color:var(--sand)}
+.core .v small{font-size:.5em;color:var(--dust)}
+.core p{margin:8px 0 0;color:var(--dust);font-size:14px;line-height:1.45}
+@media (max-width:860px){.cores{grid-template-columns:1fr 1fr}}
+
+/* layer explorer */
+.explorer{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:34px;margin-top:40px;align-items:start}
+.viewer{position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#000;user-select:none;touch-action:pan-y}
+.viewer img{-webkit-user-drag:none;pointer-events:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.viewer .top{clip-path:inset(0 0 0 50%)}
+.viewer .handle{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--sand);transform:translateX(-1px);cursor:ew-resize}
+.viewer .handle span{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:var(--sand);color:var(--basalt);display:grid;place-items:center;font:600 15px var(--mono);box-shadow:0 2px 12px rgba(0,0,0,.5)}
+.viewer .tagL,.viewer .tagR{position:absolute;top:12px;font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;background:rgba(20,18,16,.78);padding:5px 9px;border-radius:5px;pointer-events:none}
+.viewer .tagL{left:12px}.viewer .tagR{right:12px}
+.viewer .grid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(239,230,212,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(239,230,212,.07) 1px,transparent 1px);background-size:10% 10%}
+.viewer.single .top,.viewer.single .handle,.viewer.single .tagR{display:none}
+.scale{display:flex;align-items:center;gap:10px;margin-top:12px;font:12px var(--mono);color:var(--dust)}
+.scale .bar{flex:1;height:10px;border-radius:3px;border:1px solid var(--line)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tab{background:var(--slate);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:14px;color:var(--dust);transition:all .15s}
+.tab:hover{color:var(--sand);border-color:var(--dust)}
+.tab[aria-selected="true"]{background:var(--ochre);border-color:var(--ochre);color:#1d1306;font-weight:600}
+.layerinfo{margin-top:22px;background:var(--slate);border:1px solid var(--line);border-radius:12px;padding:22px;min-height:210px}
+.layerinfo .f{font:13px var(--mono);color:var(--glacier);background:rgba(127,227,238,.07);border-left:2px solid var(--glacier);padding:8px 12px;margin:12px 0;border-radius:0 6px 6px 0}
+.layerinfo p{margin:0 0 10px;color:#d9cfbb}
+.toggle{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:14px;color:var(--dust)}
+.switch{width:42px;height:24px;border-radius:999px;background:var(--line);border:0;position:relative;padding:0;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--sand);transition:left .2s}
+.switch[aria-checked="true"]{background:var(--sage)}
+.switch[aria-checked="true"]::after{left:21px}
+@media (max-width:860px){.explorer{grid-template-columns:1fr}}
+
+/* drill core pipeline */
+.drill{display:grid;grid-template-columns:120px 1fr;gap:0 26px;margin-top:44px}
+.rig{position:relative}
+.rig .shaft{position:sticky;top:90px;height:420px;width:46px;margin:0 auto;border-radius:23px;overflow:hidden;border:1px solid var(--line);background:var(--slate)}
+.rig .fill{position:absolute;left:0;right:0;top:0;height:0;background:linear-gradient(180deg,#8fae7c,#6b4b2a 30%,#b4472a 60%,#d4892f 85%,#ffd27a);transition:height .2s}
+.rig .bit{position:sticky;top:516px;display:block;margin:6px auto 0;width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-top:24px solid var(--dust)}
+.layers{display:flex;flex-direction:column;gap:18px}
+.stratum{border:1px solid var(--line);border-radius:14px;background:var(--slate);overflow:hidden}
+.stratum>button{width:100%;display:flex;align-items:center;gap:16px;padding:18px 20px;background:none;border:0;text-align:left}
+.stratum .d{font:500 12px var(--mono);color:var(--ochre);min-width:62px}
+.stratum .t{font:700 19px var(--serif);flex:1}
+.stratum .chev{transition:transform .25s;color:var(--dust)}
+.stratum[open-state="1"] .chev{transform:rotate(180deg)}
+.stratum .body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s}
+.stratum[open-state="1"] .body{grid-template-rows:1fr}
+.stratum .body>div{overflow:hidden}
+.stratum .inner{padding:0 20px 20px 98px;display:grid;grid-template-columns:1fr 200px;gap:20px;align-items:start;color:#d9cfbb}
+.stratum .inner img{border-radius:10px;border:1px solid var(--line);cursor:zoom-in}
+.stratum .inner p{margin:0 0 10px}
+.stratum .band{height:6px}
+@media (max-width:760px){.drill{grid-template-columns:1fr}.rig{display:none}.stratum .inner{padding:0 18px 18px;grid-template-columns:1fr}}
+
+/* map */
+.mapgrid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;margin-top:36px}
+.mapframe{position:relative;height:600px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#0b0a09}
+.mapframe iframe{width:100%;height:100%;border:0;display:block}
+.mapframe .loading{position:absolute;inset:0;pointer-events:none;display:grid;place-items:center;color:var(--dust);font:13px var(--mono)}
+.maptools{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.maptools button{background:var(--slate);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:14px}
+.maptools button:hover{border-color:var(--dust)}
+.targets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:640px;overflow:auto}
+.targets li button{width:100%;text-align:left;background:var(--slate);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:block}
+.targets li button:hover,.targets li button[aria-expanded="true"]{border-color:var(--ochre)}
+.targets .row{display:flex;align-items:center;gap:10px}
+.targets .rk{width:28px;height:28px;border-radius:50%;background:var(--rust);display:grid;place-items:center;font:600 13px var(--mono);flex:none}
+.targets .meter{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.targets .meter i{display:block;height:100%;background:linear-gradient(90deg,var(--ochre),#ffd27a)}
+.targets .why{display:none;margin:10px 0 0;font-size:13px;color:var(--dust);line-height:1.5}
+.targets button[aria-expanded="true"] .why{display:block}
+@media (max-width:960px){.mapgrid{grid-template-columns:1fr}.mapframe{height:460px}.targets{max-height:none}}
+
+/* grade lab */
+.lab{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;margin-top:38px}
+.vials{display:flex;flex-direction:column;gap:10px}
+.vial{display:flex;align-items:center;gap:12px;background:var(--slate);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:left}
+.vial[aria-pressed="true"]{border-color:var(--ochre);background:#2f281f}
+.vial .dot{width:14px;height:14px;border-radius:50%;flex:none}
+.vial small{display:block;color:var(--dust);font-size:12px}
+.bench{background:var(--slate);border:1px solid var(--line);border-radius:14px;padding:24px}
+.verdict{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:18px}
+.pill{font:600 13px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:5px 12px;border-radius:999px}
+.g-high{background:#b4472a;color:#fff}.g-medium{background:#d4892f;color:#1d1306}.g-low{background:#4d6a78;color:#fff}
+.assays{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 22px}
+.assay{background:var(--basalt);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.assay span{display:block;font:11px var(--mono);color:var(--dust)}
+.assay b{font:600 18px var(--mono)}
+.probs .p{display:grid;grid-template-columns:70px 1fr 56px;align-items:center;gap:10px;margin:8px 0;font:13px var(--mono)}
+.probs .track{height:12px;background:var(--basalt);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.probs .track i{display:block;height:100%;width:0;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.drivers{margin-top:20px}
+.drv{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;font:13px var(--mono);margin:6px 0}
+.drv .axis{position:relative;height:14px;background:var(--basalt);border-radius:3px}
+.drv .axis::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--dust)}
+.drv .axis i{position:absolute;top:0;bottom:0;border-radius:3px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}
+.cm{display:grid;grid-template-columns:70px repeat(3,1fr);gap:4px;font:13px var(--mono)}
+.cm div{padding:12px 4px;text-align:center;border-radius:6px}
+.cm .h{color:var(--dust);padding:6px 4px}
+.imp .r{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center;margin:7px 0;font:13px var(--mono)}
+.imp .r i{display:block;height:12px;background:var(--ochre);border-radius:2px;transform-origin:left;transform:scaleX(0);transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.imp.in .r i{transform:scaleX(1)}
+@media (max-width:860px){.lab,.charts{grid-template-columns:1fr}.vials{flex-direction:row;overflow-x:auto;padding-bottom:6px}.vial{min-width:170px}.assays{grid-template-columns:1fr 1fr}}
+
+/* features */
+.feat{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:36px}
+.card{background:var(--slate);border:1px solid var(--line);border-radius:12px;padding:22px;transition:transform .2s,border-color .2s}
+.card:hover{transform:translateY(-4px);border-color:var(--ochre)}
+.card svg{width:34px;height:34px;margin-bottom:12px;color:var(--ochre)}
+.card p{color:var(--dust);margin:0;font-size:15px}
+@media (max-width:960px){.feat{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.feat{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;margin-top:30px;font-size:15px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line)}
+th{color:var(--dust);font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+td.mono{color:var(--ochre)}
+.note{margin-top:22px;border:1px dashed var(--line);border-radius:12px;padding:16px 18px;color:var(--dust);font-size:15px}
+
+/* run */
+.term{margin-top:30px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0d0c0b}
+.term .bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--slate);border-bottom:1px solid var(--line)}
+.term .bar i{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.term .bar i:nth-child(1){background:#b4472a}.term .bar i:nth-child(2){background:#d4892f}.term .bar i:nth-child(3){background:#8fae7c}
+.term .bar span{margin-left:auto}
+.term .bar button{background:none;border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:13px}
+.term pre{margin:0;padding:20px;overflow-x:auto;font:14px/1.75 var(--mono);color:#e3dccd}
+.term .c{color:#7d7365}
+.term .p{color:var(--sage)}
+.steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+.steps3 div{background:var(--slate);border:1px solid var(--line);border-radius:10px;padding:16px;font-size:15px;color:var(--dust)}
+.steps3 b{color:var(--sand);display:block;margin-bottom:4px}
+.steps3 code,.inline{font:13px var(--mono);background:var(--basalt);padding:2px 6px;border-radius:4px;color:var(--sand)}
+@media (max-width:760px){.steps3{grid-template-columns:1fr}}
+
+footer{border-top:1px solid var(--line);padding:36px 0 50px;color:var(--dust);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+
+/* lightbox */
+#lb{position:fixed;inset:0;background:rgba(10,9,8,.92);display:none;place-items:center;z-index:100;padding:20px}
+#lb.on{display:grid}
+#lb img{max-width:min(92vw,820px);max-height:86vh;border-radius:12px;border:1px solid var(--line)}
+#lb button{position:absolute;top:16px;right:16px;background:var(--slate);border:1px solid var(--line);border-radius:8px;padding:8px 14px}
+
+.reveal{opacity:0;transform:translateY(22px);transition:opacity .7s,transform .7s}
+.reveal.in{opacity:1;transform:none}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--sage);color:#10140f;padding:10px 18px;border-radius:8px;font-weight:600;transition:transform .3s;z-index:120}
+.toast.on{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div id="depth" aria-hidden="true"></div>
+
+<nav aria-label="Main">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="GeoOre home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 29 27H3Z" fill="#d4892f"/><path d="M16 13 22 24H10Z" fill="#241a12"/><path d="M3 27h26" stroke="#8fae7c" stroke-width="2"/></svg>
+      <span>Geo<b>Ore</b></span>
+    </a>
+    <button id="menuBtn" aria-expanded="false" aria-controls="navlinks" aria-label="Open menu">☰</button>
+    <div class="navlinks" id="navlinks">
+      <a href="#explore">Layers</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#map">Live map</a>
+      <a href="#grade">Grade lab</a>
+      <a href="#results">Results</a>
+      <a href="#run">Run it</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <canvas id="topo" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <div class="eyebrow">AI · Geospatial · Software only</div>
+    <h1>Read the land from orbit. <em>Find the ore beneath it.</em></h1>
+    <p class="lead">GeoOre maps where ore is likely to be using open satellite imagery, elevation models and geological fault maps, then grades ore quality from assay samples. No drones, no field sensors. It shows geologists where to sample next.</p>
+    <div class="ctas">
+      <a class="btn primary" href="#explore">Explore the layers ↓</a>
+      <a class="btn ghost" href="#map">Open the live map</a>
+      <a class="btn ghost" href="#run">Run it yourself</a>
+    </div>
+  </div>
+  <div id="readout" aria-hidden="true">
+    SCAN · Sentinel-2 L2A<br>
+    LAT <b id="rLat">--</b> &nbsp; LON <b id="rLon">--</b><br>
+    ELEV <b id="rEl">--</b> m &nbsp; SCORE <b id="rSc">--</b>
+  </div>
+</header>
+
+<div class="strata" aria-hidden="true"></div>
+
+<section aria-label="Key results">
+  <div class="wrap">
+    <div class="cores">
+      <div class="core reveal"><div class="v" data-count="auc0" data-dec="3">0</div><p>Map accuracy (ROC-AUC) against the hidden ore bodies</p></div>
+      <div class="core reveal"><div class="v"><span data-count="acc" data-dec="1">0</span><small>%</small></div><p>Grade classifier accuracy on held-out samples</p></div>
+      <div class="core reveal"><div class="v" data-count="cv" data-dec="2">0</div><p>Cross-validated macro F1, 5 folds</p></div>
+      <div class="core reveal"><div class="v" data-count="n_cells" data-dec="0">0</div><p>Map cells scored and explained in one run</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="explore" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Layer explorer</div>
+    <h2>Peel the landscape apart</h2>
+    <p class="sub">Pick a layer to see what each one shows. Drag the handle to compare it with the true-colour satellite view. Every image here was produced by the GeoOre pipeline.</p>
+    <div class="explorer">
+      <div>
+        <div class="viewer" id="viewer" role="img" aria-label="Layer comparison viewer">
+          <img id="vBase" draggable="false" alt="True-colour satellite image of the study area">
+          <img id="vTop" class="top" draggable="false" alt="Selected analysis layer">
+          <div class="grid"></div>
+          <span class="tagL">Satellite</span><span class="tagR" id="vTag">Layer</span>
+          <div class="handle" id="handle" role="slider" tabindex="0" aria-label="Comparison position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><span>⇆</span></div>
+        </div>
+        <div class="scale"><span id="sLo">low</span><div class="bar" id="sBar"></div><span id="sHi">high</span></div>
+      </div>
+      <div>
+        <div class="tabs" role="tablist" id="tabs" aria-label="Map layers"></div>
+        <div class="layerinfo" id="info" role="tabpanel" aria-live="polite"></div>
+        <div class="toggle"><button class="switch" id="cmpSwitch" role="switch" aria-checked="true" aria-label="Compare with satellite"></button> Compare with satellite</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pipeline">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Drilling down, layer by layer</h2>
+    <p class="sub">The pipeline reads like a drill core: each layer of evidence sits on the one before it. Click a layer to open it. Click an image to enlarge it.</p>
+    <div class="drill">
+      <div class="rig" aria-hidden="true"><div class="shaft"><div class="fill" id="drillFill"></div></div><i class="bit"></i></div>
+      <div class="layers" id="strata"></div>
+    </div>
+  </div>
+</section>
+
+<section id="map" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Live demo</div>
+    <h2>The interactive prospectivity map</h2>
+    <p class="sub">This is the real Leaflet map that GeoOre exports. Use the layer switcher at the top right of the map to toggle the heatmap, confidence, faults, assay samples and the clickable cell explanations. The ranked targets are listed alongside.</p>
+    <div class="mapgrid">
+      <div>
+        <div class="mapframe"><div class="loading" id="mapLoading">Loading map…</div><iframe id="mapFrame" allowfullscreen title="GeoOre interactive prospectivity map"></iframe></div>
+        <div class="maptools">
+          <button id="mapFull">⛶ Full screen</button>
+          <button id="mapOpen">↗ Open in new tab</button>
+          <button id="mapReload">⟲ Reset view</button>
+        </div>
+      </div>
+      <div>
+        <h3>Ranked sampling targets</h3>
+        <ul class="targets" id="targets"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="grade">
+  <div class="wrap">
+    <div class="eyebrow">Grade lab</div>
+    <h2>From assay to ore grade</h2>
+    <p class="sub">An XGBoost model sorts samples into high, medium or low grade. Choose a held-out sample to see its assay values, the model's prediction, and the elements that pushed it there (SHAP values). These are real outputs from the trained model.</p>
+    <div class="lab">
+      <div class="vials" id="vials" aria-label="Samples"></div>
+      <div class="bench" id="bench" aria-live="polite"></div>
+    </div>
+    <div class="charts">
+      <div class="bench">
+        <h3>Confusion matrix</h3>
+        <p class="sub" style="font-size:14px;margin-bottom:14px" id="cmSub"></p>
+        <div class="cm" id="cm"></div>
+      </div>
+      <div class="bench">
+        <h3>What drives the predictions</h3>
+        <p class="sub" style="font-size:14px;margin-bottom:10px">Mean absolute SHAP value per feature. Copper and gold lead, as expected for a Cu-Au system.</p>
+        <div class="imp" id="imp"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">Features</div>
+    <h2>What GeoOre delivers</h2>
+    <div class="feat">
+      <div class="card reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><h3>Field identification</h3><p>Iron-oxide and clay indices from Sentinel-2 or Landsat, combined with terrain and fault proximity into one score per cell.</p></div>
+      <div class="card reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/><path d="M7 15h10"/></svg><h3>Grade classifier</h3><p>XGBoost predicts high, medium or low grade, cross-validated, with SHAP explanations for every sample.</p></div>
+      <div class="card reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg><h3>Explained heatmaps</h3><p>Each cell gets a confidence score and a sentence saying what drove its score.</p></div>
+      <div class="card reveal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v3h16v-3"/></svg><h3>GIS exports</h3><p>GeoTIFF rasters plus GeoJSON and shapefiles for zones, targets and samples, ready for QGIS or ArcGIS.</p></div>
+    </div>
+    <table>
+      <thead><tr><th>Measure</th><th>Value</th></tr></thead>
+      <tbody id="metrics"></tbody>
+    </table>
+    <div class="note">These scores come from the built-in demo area, where the ore bodies are known so the method can be checked. Real ground is noisier, so expect lower numbers. Use the results to decide where to sample, not as a replacement for sampling.</div>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <div class="eyebrow">Get started</div>
+    <h2>Run it on your machine</h2>
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i><span></span><button id="copyBtn">Copy</button></div>
+<pre id="cmds"><span class="c"># 1. get the code</span>
+<span class="p">$</span> git clone https://github.com/&lt;your-username&gt;/GeoOre.git
+<span class="p">$</span> cd GeoOre
+<span class="p">$</span> pip install -r requirements.txt
+
+<span class="c"># 2. run the full pipeline (results go to outputs/)</span>
+<span class="p">$</span> python scripts/run_pipeline.py
+
+<span class="c"># 3. open the interactive app</span>
+<span class="p">$</span> streamlit run app.py
+
+<span class="c"># 4. run the tests</span>
+<span class="p">$</span> pytest</pre>
+    </div>
+    <div class="steps3">
+      <div><b>Use real imagery</b>Install <code>earthengine-api</code>, run <code>earthengine authenticate</code>, then choose Google Earth Engine in the app sidebar.</div>
+      <div><b>Bring your own data</b>Upload an assay CSV and a fault-line GeoJSON from your geological survey in the sidebar.</div>
+      <div><b>Take it to GIS</b>The Export tab bundles rasters, GeoJSON and shapefiles into one zip.</div>
+    </div>
+  </div>
+</section>
+
+<div class="strata" aria-hidden="true"></div>
+<footer>
+  <div class="wrap">
+    <span><b style="color:var(--sand)">GeoOre</b> · Built by Swayam Shakya · 2026</span>
+    <span class="mono">MIT License · <a href="#top">Back to surface ↑</a></span>
+  </div>
+</footer>
+
+<div id="lb" role="dialog" aria-modal="true" aria-label="Enlarged image"><button id="lbClose">Close ✕</button><img id="lbImg" alt=""></div>
+<div class="toast" id="toast">Copied</div>
+
+<script>
+const D = /*__DATA__*/null;
+const MAP_B64 = "__MAP_B64__";
+const $ = (s, r = document) => r.querySelector(s);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- nav ---------- */
+const menuBtn = $("#menuBtn"), links = $("#navlinks");
+menuBtn.addEventListener("click", () => {
+  const open = links.classList.toggle("open");
+  menuBtn.setAttribute("aria-expanded", open);
+  menuBtn.textContent = open ? "✕" : "☰";
+});
+links.querySelectorAll("a").forEach(a => a.addEventListener("click", () => {
+  links.classList.remove("open"); menuBtn.setAttribute("aria-expanded", false); menuBtn.textContent = "☰";
+}));
+const sections = [...document.querySelectorAll("section[id]")];
+addEventListener("scroll", () => {
+  const h = document.documentElement;
+  $("#depth").style.width = (h.scrollTop / (h.scrollHeight - h.clientHeight) * 100) + "%";
+  let cur = "";
+  sections.forEach(s => { if (s.getBoundingClientRect().top < 140) cur = s.id; });
+  links.querySelectorAll("a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + cur));
+  drillProgress();
+}, { passive: true });
+
+/* ---------- hero: live contour map ---------- */
+(() => {
+  const cv = $("#topo"), ctx = cv.getContext("2d");
+  let W, H, cell, cols, rows, t = 0, mx = -1, my = -1;
+  const perm = new Uint8Array(512);
+  for (let i = 0; i < 256; i++) perm[i] = i;
+  for (let i = 255; i > 0; i--) { const j = (Math.sin(i * 91.7) * 43758.5453 % 1 + 1) % 1 * (i + 1) | 0; [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
+  const fade = x => x * x * x * (x * (x * 6 - 15) + 10), lerp = (a, b, k) => a + (b - a) * k;
+  const grad = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+  function noise(x, y) {
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y);
+    const u = fade(x), v = fade(y), a = perm[X] + Y, b = perm[X + 1] + Y;
+    return lerp(lerp(grad(perm[a], x, y), grad(perm[b], x - 1, y), u), lerp(grad(perm[a + 1], x, y - 1), grad(perm[b + 1], x - 1, y - 1), u), v);
+  }
+  const field = (x, y) => noise(x * .9 + t, y * .9) * .65 + noise(x * 2.1, y * 2.1 - t * .6) * .25 + noise(x * 4.3, y * 4.3) * .1;
+  let F;
+  function size() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cell = W < 700 ? 14 : 12; cols = Math.ceil(W / cell) + 1; rows = Math.ceil(H / cell) + 1;
+    F = new Float32Array(cols * rows);
+  }
+  const levels = []; for (let l = -0.6; l <= 0.6; l += 0.075) levels.push(+l.toFixed(3));
+  function draw() {
+    const s = 3.2 / Math.max(W, H) * cell;
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) F[j * cols + i] = field(i * s, j * s);
+    ctx.clearRect(0, 0, W, H);
+    levels.forEach((lv, li) => {
+      const major = li % 4 === 0;
+      ctx.strokeStyle = lv > 0.3 ? `rgba(212,137,47,${major ? .75 : .4})` : lv > 0 ? `rgba(181,169,147,${major ? .42 : .2})` : `rgba(143,174,124,${major ? .38 : .16})`;
+      ctx.lineWidth = major ? 1.3 : .8;
+      ctx.beginPath();
+      for (let j = 0; j < rows - 1; j++) for (let i = 0; i < cols - 1; i++) {
+        const a = F[j * cols + i], b = F[j * cols + i + 1], c = F[(j + 1) * cols + i + 1], d = F[(j + 1) * cols + i];
+        const k = (a > lv) | (b > lv) << 1 | (c > lv) << 2 | (d > lv) << 3;
+        if (k === 0 || k === 15) continue;
+        const x = i * cell, y = j * cell, e = (p, q) => (lv - p) / (q - p);
+        const T = [x + cell * e(a, b), y], R = [x + cell, y + cell * e(b, c)], B = [x + cell * e(d, c), y + cell], L = [x, y + cell * e(a, d)];
+        const seg = (P, Q) => { ctx.moveTo(P[0], P[1]); ctx.lineTo(Q[0], Q[1]); };
+        switch (k) {
+          case 1: case 14: seg(L, T); break; case 2: case 13: seg(T, R); break;
+          case 3: case 12: seg(L, R); break; case 4: case 11: seg(R, B); break;
+          case 6: case 9: seg(T, B); break; case 7: case 8: seg(L, B); break;
+          case 5: seg(L, T); seg(R, B); break; case 10: seg(T, R); seg(L, B); break;
+        }
+      }
+      ctx.stroke();
+    });
+    if (mx >= 0) {
+      ctx.strokeStyle = "rgba(127,227,238,.85)"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(mx, my, 34, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx - 48, my); ctx.lineTo(mx - 22, my); ctx.moveTo(mx + 22, my); ctx.lineTo(mx + 48, my);
+      ctx.moveTo(mx, my - 48); ctx.lineTo(mx, my - 22); ctx.moveTo(mx, my + 22); ctx.lineTo(mx, my + 48); ctx.stroke();
+      const v = field(mx / cell * s, my / cell * s);
+      $("#rLat").textContent = (63.14 - my / H * .12).toFixed(4) + "°";
+      $("#rLon").textContent = (14.82 + mx / W * .2).toFixed(4) + "°";
+      $("#rEl").textContent = Math.round(420 + v * 380);
+      $("#rSc").textContent = Math.max(0, Math.min(1, (v + .25) * 1.4)).toFixed(2);
+    }
+  }
+  let visible = true, last = 0;
+  new IntersectionObserver(e => visible = e[0].isIntersecting).observe(cv);
+  function loop(ts) {
+    if (visible && ts - last > 50) { t += .004; draw(); last = ts; }
+    requestAnimationFrame(loop);
+  }
+  const hero = cv.parentElement;
+  hero.addEventListener("pointermove", e => { const r = cv.getBoundingClientRect(); mx = e.clientX - r.left; my = e.clientY - r.top; });
+  hero.addEventListener("pointerleave", () => { mx = my = -1; });
+  function idleReadout() {  // show the scan centre until the pointer moves in
+    const s = 3.2 / Math.max(W, H) * cell, v = field(W * .7 / cell * s, H * .5 / cell * s);
+    $("#rLat").textContent = (63.14 - .06).toFixed(4) + "°"; $("#rLon").textContent = (14.82 + .14).toFixed(4) + "°";
+    $("#rEl").textContent = Math.round(420 + v * 380); $("#rSc").textContent = Math.max(0, Math.min(1, (v + .25) * 1.4)).toFixed(2);
+  }
+  addEventListener("resize", () => { size(); draw(); });
+  size(); draw(); idleReadout();
+  if (!reduce) requestAnimationFrame(loop);
+})();
+
+/* ---------- count-up stats ---------- */
+const countVals = { auc0: D.auc[0], acc: D.acc, cv: D.cv, n_cells: D.n_cells };
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return;
+  e.target.classList.add("in");
+  e.target.querySelectorAll("[data-count]").forEach(el => {
+    const end = countVals[el.dataset.count], dec = +el.dataset.dec, t0 = performance.now();
+    const fmt = v => dec ? v.toFixed(dec) : Math.round(v).toLocaleString();
+    if (reduce) { el.textContent = fmt(end); return; }
+    (function step(n) { const k = Math.min(1, (n - t0) / 1200), ease = 1 - Math.pow(1 - k, 3); el.textContent = fmt(end * ease); if (k < 1) requestAnimationFrame(step); })(t0);
+  });
+  if (e.target.id === "imp") e.target.classList.add("in");
+  io.unobserve(e.target);
+}), { threshold: .25 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+/* ---------- layer explorer ---------- */
+const LAYERS = [
+  { k: "iron", n: "Iron oxide", c: "linear-gradient(90deg,#ffffcc,#fd8d3c,#800026)", f: "iron_oxide = B4 (red) / B2 (blue)",
+    d: "Ferric iron minerals such as hematite and goethite reflect strongly in red and weakly in blue. Weathered sulphide ore leaves rusty iron caps (gossans) on the surface, which show up here as dark red patches." },
+  { k: "clay", n: "Clay alteration", c: "linear-gradient(90deg,#fff7fb,#67a9cf,#014636)", f: "clay = B11 (SWIR1) / B12 (SWIR2)",
+    d: "Hot fluids around an ore body turn feldspar into clays like kaolinite and sericite. These absorb light in SWIR2, so the ratio rises over altered rock. The clay halo is usually wider than the ore itself." },
+  { k: "ndvi", n: "Vegetation", c: "linear-gradient(90deg,#ffffe5,#78c679,#004529)", f: "NDVI = (B8 − B4) / (B8 + B4)",
+    d: "Plants hide the rock. Where NDVI is high, the mineral indices are less reliable, so GeoOre gives bare ground more weight. Altered ground is also often poorly vegetated." },
+  { k: "terrain", n: "Terrain + faults", c: "linear-gradient(90deg,#1b2a5a,#3d8a6b,#c9b77a,#ffffff)", f: "fault_proximity = exp(−distance / 600 m)",
+    d: "A shaded relief view of the elevation model with fault traces (dashed). Faults are pathways for ore-forming fluids, so cells close to a fault score higher. Slope and roughness come from the DEM." },
+  { k: "score", n: "Prospectivity", c: "linear-gradient(90deg,#000004,#781c6d,#ed6925,#fcffa4)", f: "score = 0.5 · expert overlay + 0.5 · random forest",
+    d: "The final score for every cell. It blends a weighted overlay of all evidence layers with random forests trained on sample locations. Stars mark the ranked sampling targets." },
+  { k: "conf", n: "Confidence", c: "linear-gradient(90deg,#440154,#21918c,#fde725)", f: "confidence = 1 − 2·σ(forests) − 0.5·|expert − model|",
+    d: "How much the methods agree. Confidence is high where the bootstrapped forests agree with each other and with the expert overlay, and lower where they disagree." },
+  { k: "truth", n: "Hidden ore", c: "linear-gradient(90deg,#000004,#b73779,#fcfdbf)", f: "validation only: never seen by the scoring step",
+    d: "The demo area hides real ore bodies so the method can be checked. Compare this with the prospectivity layer: the bright spots line up, giving a ROC-AUC of about " + D.auc[0] + "." }
+];
+const vBase = $("#vBase"), vTop = $("#vTop"), viewer = $("#viewer"), handle = $("#handle");
+vBase.src = D.layers.rgb;
+const tabs = $("#tabs");
+LAYERS.forEach((L, i) => {
+  const b = document.createElement("button");
+  b.className = "tab"; b.setAttribute("role", "tab"); b.textContent = L.n; b.id = "tab-" + L.k;
+  b.setAttribute("aria-selected", "false");
+  b.addEventListener("click", () => pickLayer(i));
+  b.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      const n = (i + (e.key === "ArrowRight" ? 1 : LAYERS.length - 1)) % LAYERS.length;
+      pickLayer(n); tabs.children[n].focus();
+    }
+  });
+  tabs.appendChild(b);
+});
+let compare = true;
+function pickLayer(i) {
+  const L = LAYERS[i];
+  [...tabs.children].forEach((b, j) => b.setAttribute("aria-selected", j === i));
+  vTop.src = D.layers[L.k]; vTop.alt = L.n + " layer";
+  $("#vTag").textContent = L.n; $("#sBar").style.background = L.c;
+  $("#info").innerHTML = `<h3>${L.n}</h3><div class="f">${L.f}</div><p>${L.d}</p>`;
+  if (!compare) vBase.src = D.layers[L.k];
+}
+$("#cmpSwitch").addEventListener("click", e => {
+  compare = !compare; e.currentTarget.setAttribute("aria-checked", compare);
+  viewer.classList.toggle("single", !compare);
+  vBase.src = compare ? D.layers.rgb : vTop.src;
+  $(".tagL", viewer).textContent = compare ? "Satellite" : $("#vTag").textContent;
+});
+function setSplit(p) {
+  p = Math.max(0, Math.min(100, p));
+  vTop.style.clipPath = `inset(0 0 0 ${p}%)`; handle.style.left = p + "%";
+  handle.setAttribute("aria-valuenow", Math.round(p));
+}
+let dragging = false;
+const posFrom = e => { const r = viewer.getBoundingClientRect(); return (e.clientX - r.left) / r.width * 100; };
+viewer.addEventListener("pointerdown", e => { if (!compare) return; e.preventDefault(); dragging = true; viewer.setPointerCapture(e.pointerId); setSplit(posFrom(e)); });
+viewer.addEventListener("pointermove", e => { if (dragging) setSplit(posFrom(e)); });
+viewer.addEventListener("pointerup", () => dragging = false);
+viewer.addEventListener("pointercancel", () => dragging = false);
+handle.addEventListener("keydown", e => {
+  const v = +handle.getAttribute("aria-valuenow");
+  if (e.key === "ArrowLeft") { setSplit(v - 5); e.preventDefault(); }
+  if (e.key === "ArrowRight") { setSplit(v + 5); e.preventDefault(); }
+});
+pickLayer(4); setSplit(50);
+
+/* ---------- drill-core pipeline ---------- */
+const STEPS = [
+  { d: "0 – 10 m", t: "Gather satellite and terrain data", img: "rgb", band: "#8fae7c",
+    p: ["Sentinel-2 surface reflectance (blue, green, red, near-infrared and two short-wave infrared bands) is pulled from Google Earth Engine as a cloud-masked median composite, together with the SRTM elevation model.",
+        "An offline demo area with the same band layout lets the whole tool run without an Earth Engine account."] },
+  { d: "10 – 25 m", t: "Compute mineral indices", img: "iron", band: "#c97b3a",
+    p: ["Band ratios pick out minerals that form around ore: iron oxides (red ÷ blue) and clays (SWIR1 ÷ SWIR2).",
+        "NDVI marks vegetated ground so hidden rock does not mislead the score."] },
+  { d: "25 – 40 m", t: "Add structure: terrain and faults", img: "terrain", band: "#6b4b2a",
+    p: ["Fault lines from a geological survey map are rasterised and turned into a distance layer that fades with distance.",
+        "Slope and local relief come from the elevation model."] },
+  { d: "40 – 60 m", t: "Score every cell", img: "score", band: "#b4472a",
+    p: ["A weighted overlay of the five evidence layers gives an expert score. Random forests trained on sample results give a data score. The two are blended.",
+        "Separated local maxima become ranked sampling targets, each with a plain-language reason."] },
+  { d: "60 – 75 m", t: "Grade the samples", img: "conf", band: "#d4892f",
+    p: ["Assay values are log-transformed and pathfinder ratios (Cu/Zn, Au/As, S/Fe) are added. XGBoost then predicts high, medium or low grade, and SHAP explains each call."] },
+  { d: "75 m +", t: "Export to GIS", img: "truth", band: "#ffd27a",
+    p: ["Rasters go out as GeoTIFF, and zones, targets and samples as GeoJSON and shapefiles. Everything opens directly in QGIS or ArcGIS."] }
+];
+const strataEl = $("#strata");
+STEPS.forEach((s, i) => {
+  const el = document.createElement("div");
+  el.className = "stratum"; el.setAttribute("open-state", i === 0 ? "1" : "0");
+  el.innerHTML = `<div class="band" style="background:${s.band}"></div>
+    <button aria-expanded="${i === 0}" aria-controls="sb${i}"><span class="d">${s.d}</span><span class="t">${s.t}</span><span class="chev" aria-hidden="true">▾</span></button>
+    <div class="body" id="sb${i}"><div><div class="inner"><div>${s.p.map(x => `<p>${x}</p>`).join("")}</div>
+    <img src="${D.layers[s.img]}" alt="${s.t}" loading="lazy" tabindex="0"></div></div></div>`;
+  const btn = el.querySelector("button");
+  btn.addEventListener("click", () => {
+    const open = el.getAttribute("open-state") !== "1";
+    el.setAttribute("open-state", open ? "1" : "0"); btn.setAttribute("aria-expanded", open);
+  });
+  const img = el.querySelector("img");
+  img.addEventListener("click", () => openLB(img));
+  img.addEventListener("keydown", e => { if (e.key === "Enter") openLB(img); });
+  strataEl.appendChild(el);
+});
+function drillProgress() {
+  const r = strataEl.getBoundingClientRect(), vh = innerHeight;
+  const k = Math.max(0, Math.min(1, (vh * .6 - r.top) / r.height));
+  $("#drillFill").style.height = (k * 100) + "%";
+}
+drillProgress();
+
+/* ---------- lightbox ---------- */
+const lb = $("#lb");
+function openLB(img) { $("#lbImg").src = img.src; $("#lbImg").alt = img.alt; lb.classList.add("on"); $("#lbClose").focus(); }
+function closeLB() { lb.classList.remove("on"); }
+$("#lbClose").addEventListener("click", closeLB);
+lb.addEventListener("click", e => { if (e.target === lb) closeLB(); });
+addEventListener("keydown", e => { if (e.key === "Escape") closeLB(); });
+
+/* ---------- live map ---------- */
+let mapHTML = null;
+function mapSource() {
+  if (!mapHTML) {
+    const bin = atob(MAP_B64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    mapHTML = new TextDecoder("utf-8").decode(bytes);
+  }
+  return mapHTML;
+}
+function loadMap() {
+  const f = $("#mapFrame"), msg = $("#mapLoading");
+  msg.style.display = "grid"; msg.textContent = "Loading map…";
+  f.onload = () => {
+    msg.style.display = "none";
+    // Only warn when we can see inside the frame and Leaflet truly is missing
+    setTimeout(() => {
+      let doc = null;
+      try { doc = f.contentDocument; } catch (e) { doc = null; }
+      if (doc && doc.body && !doc.querySelector(".leaflet-container")) {
+        msg.style.display = "grid";
+        msg.textContent = "The map could not start here. Use “Open in new tab”.";
+      }
+    }, 2500);
+  };
+  f.removeAttribute("src");
+  f.srcdoc = mapSource();
+}
+if (document.readyState === "loading") addEventListener("DOMContentLoaded", loadMap); else loadMap();
+$("#mapReload").addEventListener("click", loadMap);
+$("#mapOpen").addEventListener("click", () => {
+  const w = window.open("", "_blank");
+  if (!w) { alert("Please allow pop-ups to open the map in a new tab."); return; }
+  w.document.open(); w.document.write(mapSource()); w.document.close();
+});
+$("#mapFull").addEventListener("click", () => {
+  const box = $(".mapframe");
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (box.requestFullscreen) box.requestFullscreen();
+  else if (box.webkitRequestFullscreen) box.webkitRequestFullscreen();
+});
+const tl = $("#targets");
+D.targets.forEach(t => {
+  const li = document.createElement("li");
+  li.innerHTML = `<button aria-expanded="false"><div class="row"><span class="rk">${t.rank}</span>
+    <div style="flex:1"><div class="row" style="justify-content:space-between;font:13px var(--mono)"><span>score ${t.score.toFixed(2)}</span><span style="color:var(--dust)">conf ${t.conf.toFixed(2)}</span></div>
+    <div class="meter" style="margin-top:6px"><i style="width:${t.score * 100}%"></i></div></div></div>
+    <p class="why">${t.why}</p></button>`;
+  const b = li.firstElementChild;
+  b.addEventListener("click", () => b.setAttribute("aria-expanded", b.getAttribute("aria-expanded") !== "true"));
+  tl.appendChild(li);
+});
+
+/* ---------- grade lab ---------- */
+const GC = { high: "#b4472a", medium: "#d4892f", low: "#4d6a78" };
+const vials = $("#vials"), bench = $("#bench");
+const LABEL = { Cu_ppm: "Cu ppm", Au_ppb: "Au ppb", Fe_pct: "Fe %", S_pct: "S %", As_ppm: "As ppm", Mo_ppm: "Mo ppm" };
+D.samples.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "vial"; b.setAttribute("aria-pressed", "false");
+  b.innerHTML = `<span class="dot" style="background:${GC[s.truth]}"></span><span><b class="mono">${s.id}</b><small>true grade: ${s.truth}</small></span>`;
+  b.addEventListener("click", () => showSample(i));
+  vials.appendChild(b);
+});
+function showSample(i) {
+  const s = D.samples[i];
+  [...vials.children].forEach((b, j) => b.setAttribute("aria-pressed", j === i));
+  const ok = s.pred === s.truth;
+  const maxAbs = Math.max(...s.drivers.map(d => Math.abs(d[1])), .01);
+  bench.innerHTML = `<div class="verdict"><h3 style="margin:0">Sample ${s.id}</h3>
+      <span class="pill g-${s.pred}">Predicted ${s.pred}</span>
+      <span style="color:${ok ? "var(--sage)" : "var(--rust)"};font:13px var(--mono)">${ok ? "✓ matches assay grade" : "✗ assay grade was " + s.truth}</span></div>
+    <div class="assays">${Object.entries(s.assay).map(([k, v]) => `<div class="assay"><span>${LABEL[k]}</span><b>${v.toLocaleString()}</b></div>`).join("")}</div>
+    <h3 style="font-size:16px">Model probabilities</h3>
+    <div class="probs">${D.classes.slice().reverse().map(c => `<div class="p"><span>${c}</span><div class="track"><i data-w="${s.proba[c] * 100}" style="background:${GC[c]}"></i></div><span>${(s.proba[c] * 100).toFixed(1)}%</span></div>`).join("")}</div>
+    <div class="drivers"><h3 style="font-size:16px">Top drivers (SHAP)</h3>
+    <p class="sub" style="font-size:13px;margin-bottom:8px">Bars to the right pushed the model toward “${s.pred}”, bars to the left pushed away from it.</p>
+    ${s.drivers.map(([k, v]) => { const w = Math.abs(v) / maxAbs * 50; return `<div class="drv"><span>${k}</span><div class="axis"><i style="${v >= 0 ? "left:50%" : "right:50%"};width:${w}%;background:${v >= 0 ? "var(--ochre)" : "var(--glacier)"}"></i></div></div>`; }).join("")}</div>`;
+  requestAnimationFrame(() => requestAnimationFrame(() => bench.querySelectorAll("[data-w]").forEach(el => el.style.width = el.dataset.w + "%")));
+}
+showSample(0);
+
+const cm = $("#cm"), mx = Math.max(...D.cm.flat());
+$("#cmSub").textContent = `Held-out test set, ${D.n_test} samples. Rows are true grades, columns are predictions.`;
+cm.innerHTML = `<div class="h"></div>` + D.classes.map(c => `<div class="h">pred ${c}</div>`).join("") +
+  D.cm.map((row, i) => `<div class="h" style="text-align:right">${D.classes[i]}</div>` + row.map((v, j) => {
+    const a = .12 + .88 * v / mx; return `<div style="background:rgba(212,137,47,${a});color:${a > .5 ? "#1d1306" : "var(--sand)"};font-weight:${i === j ? 600 : 400}">${v}</div>`; }).join("")).join("");
+const imp = $("#imp"), mi = D.importance[0][1];
+imp.innerHTML = D.importance.map(([k, v]) => `<div class="r"><span>${k}</span><div style="display:flex;align-items:center;gap:8px"><i style="width:${v / mi * 100}%"></i><span style="color:var(--dust)">${v.toFixed(2)}</span></div></div>`).join("");
+io.observe(imp);
+
+$("#metrics").innerHTML = [
+  ["Prospectivity ROC-AUC (3 random areas)", D.auc.join(" · ")],
+  ["Grade classifier test accuracy", D.acc + "%"],
+  ["Grade classifier test macro F1", D.f1],
+  ["5-fold cross-validated macro F1", D.cv + " ± " + D.cv_sd],
+  ["Map cells scored per run", D.n_cells.toLocaleString()]
+].map(r => `<tr><td>${r[0]}</td><td class="mono">${r[1]}</td></tr>`).join("");
+
+/* ---------- copy ---------- */
+$("#copyBtn").addEventListener("click", async () => {
+  const text = $("#cmds").innerText.split("\n").filter(l => l.startsWith("$")).map(l => l.slice(2)).join("\n");
+  try { await navigator.clipboard.writeText(text); }
+  catch { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+  const t = $("#toast"); t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 1400);
+});
+</script>
+</body>
+</html>
