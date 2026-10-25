@@ -1,4 +1,4 @@
-# GeoOre
+# [GeoOre](https://requiemdoomed.github.io/GeoOre/)
 
 **Geospatial ore-field identification and ore grade classification.**
 A software-only mineral exploration tool: open satellite data, elevation models and geological maps
